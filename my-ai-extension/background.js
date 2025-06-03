@@ -219,7 +219,9 @@ async function handleFollowUpWithMcp(originalUtterance, browserData, tabUrl, tab
 
 // 팝업 또는 content script로부터 메시지 수신
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  console.log("🎯 Background: Received message:", request);
   if (request.type === "NLU_QUERY" && request.utterance) {
+    console.log("🎤 USER SAID:", request.utterance);
     handleNluQuery(request.utterance, sender, sendResponse);
     return true; // 비동기 응답을 위해 true 반환
   }

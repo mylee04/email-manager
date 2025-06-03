@@ -5,12 +5,10 @@ let recognition;
 let isRecognizing = false;
 let extensionIsEnabled = false; // 기본적으로 비활성화 상태로 시작
 
-// TTS 중복 방지를 위한 변수 추가
-let isSpeaking = false;
-
 // TTS 큐 시스템 추가
 let ttsQueue = [];
 let isProcessingTTS = false;
+let ttsTimeoutId = null; // 강력한 음성인식 제어를 위한 변수
 
 // Web Speech API 초기화
 if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
@@ -39,66 +37,83 @@ if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
 
   recognition.onerror = (event) => {
     isRecognizing = false;
-    console.error('Speech recognition error:', event.error);
     if (event.error === 'no-speech') {
-      console.log('No speech detected.');
-    } else if (event.error === 'audio-capture') {
-      console.error('Microphone access denied or microphone is in use.');
-    } else if (event.error === 'not-allowed') {
-      console.error('Microphone use was not allowed by the user or policy.');
-    }
+      console.log('Speech recognition: No speech detected.'); 
+  } else if (event.error === 'audio-capture') {
+      console.error('Speech recognition error: Microphone access denied or microphone is in use.', event);
+  } else if (event.error === 'not-allowed') {
+      console.error('Speech recognition error: Microphone use was not allowed by the user or policy.', event);
+  } else {
+      // 기타 예상치 못한 오류들
+      console.error('Speech recognition error (unknown):', event.error, event);
+  }
   };
 
-  recognition.onend = () => {
-    isRecognizing = false;
-    console.log('Speech recognition ended.');
-    if (extensionIsEnabled && !recognition.__manualStop) {
-      console.log('Attempting to automatically restart speech recognition.');
-      try {
-        if (recognition && !isRecognizing) recognition.start();
-      } catch (e) {
-        console.error("Error during automatic restart:", e);
-      }
-    }
-    recognition.__manualStop = false;
-  };
+  recognition.onend = function() {
+  console.log("Speech recognition ended. __pausedForTTS:", recognition?.__pausedForTTS, "__manualStop:", recognition?.__manualStop); // recognition 객체 존재 여부 확인 추가
+  isRecognizing = false;
 
-} else {
+  if (recognition && recognition.__pausedForTTS) { // recognition 객체가 있고, TTS 때문에 멈춘 경우
+      console.log('Speech recognition ended because TTS was playing. TTS logic will handle restart.');
+      // TTS의 onend/onerror 콜백에서 recognition.__pausedForTTS를 false로 만들고,
+      // 필요하다면 recognition.start()를 호출할 것이므로, 여기서는 아무것도 하지 않습니다.
+      return;
+  }
+
+  // 이 아래는 TTS 때문이 "아닌" 다른 이유로 음성 인식이 종료된 경우입니다.
+  // (예: no-speech 오류 후, 또는 명시적인 stopRecognition() 호출 후 __manualStop이 false인 경우 등)
+  if (extensionIsEnabled && (!recognition || !recognition.__manualStop)) { // 수동 중지가 아닐 때만 자동 재시작
+      console.log('Attempting to automatically restart speech recognition (non-TTS related).');
+      setTimeout(() => {
+          // 재시작 시점에서도 TTS가 재생 중이거나 TTS로 인해 멈춘 상태가 아닌지 다시 한번 확인
+          if (extensionIsEnabled && !isRecognizing && (!recognition || !recognition.__pausedForTTS)) {
+              try {
+                  if (recognition) recognition.start(); // recognition 객체가 있을 때만 start 호출
+              } catch (e) {
+                  console.error("Error during automatic restart (non-TTS related):", e);
+              }
+          } else {
+              console.log("Automatic restart skipped: conditions not met (isRecognizing:", isRecognizing, "__pausedForTTS:", recognition?.__pausedForTTS, ")");
+          }
+      }, 1000); // 1초 후 재시작
+    }
+  };
+} else { // 이 else는 if ('SpeechRecognition' in window ...) 에 대한 것
   console.error('Web Speech API is not supported in this browser.');
 }
 
 function startRecognition() {
-  console.log(`Content Script: Attempting to start recognition. Current state: extensionIsEnabled=${extensionIsEnabled}, isRecognizing=${isRecognizing}, recognition_object_exists=${!!recognition}`);
+    console.log(`Content Script: Attempting to start recognition. Current state: extensionIsEnabled=${extensionIsEnabled}, isRecognizing=${isRecognizing}, recognition_object_exists=${!!recognition}`);
 
-  if (!extensionIsEnabled) {
-    console.log("Content Script: Recognition not started - Extension is currently disabled.");
-    return;
-  }
-  if (isRecognizing) {
-    console.log("Content Script: Recognition not started - Already recognizing.");
-    return;
-  }
-  if (!recognition) {
-    console.error("Content Script: Recognition not started - Recognition object is not initialized!");
-    // 여기서 Web Speech API 초기화 코드를 다시 실행하거나, 사용자에게 알림을 줄 수 있습니다.
-    // alert("Speech recognition engine failed to load. Please try reloading the page or extension.");
-    return;
-  }
-
-  // 모든 조건 통과, 음성 인식 시작
-  try {
-    recognition.__manualStop = false;
-    console.log("Content Script: All conditions met. Calling recognition.start().");
-    recognition.start();
-  } catch (e) {
-    console.error("Error starting speech recognition:", e);
-    // InvalidStateError는 이미 인식이 시작되었거나 중지 중일 때 발생할 수 있음
-    if (e.name === 'InvalidStateError') {
-       // isRecognizing 상태를 다시 확인하거나, 잠시 후 재시도하는 로직 고려
-       // 또는 isRecognizing = true; 로 강제 동기화 (주의 필요)
-       console.warn("Recognition might be in an invalid state (e.g., already started or stopping). Current isRecognizing:", isRecognizing);
+    // 🚨 start 시도 시 플래그들 초기화
+    if (recognition) {
+        recognition.__manualStop = false;
+        recognition.__pausedForTTS = false;
     }
-  }
+
+    if (!extensionIsEnabled) {
+        console.log("Content Script: Recognition not started - Extension is currently disabled.");
+        return;
+    }
+    if (isRecognizing) {
+        console.log("Content Script: Recognition not started - Already recognizing.");
+        return;
+    }
+    if (!recognition) {
+        console.error("Content Script: Recognition not started - Recognition object is not initialized!");
+        return;
+    }
+
+    // 모든 조건 통과, 음성 인식 시작
+    try {
+        console.log("Content Script: All conditions met. Calling recognition.start().");
+        recognition.start();
+    } catch (e) {
+        console.error("Error starting speech recognition:", e);
+        if (e.name === 'InvalidStateError') {
+           console.warn("Recognition might be in an invalid state (e.g., already started or stopping). Current isRecognizing:", isRecognizing);
+        }
+    }
 }
 
 function stopRecognition() {
@@ -110,36 +125,23 @@ function stopRecognition() {
 
 // 사용자의 전체 발화 처리 함수 (새로 추가된 핵심 함수)
 function processUserUtterance(utterance) {
-    if (!extensionIsEnabled) {
-        console.log("Utterance processing skipped: extension is disabled.");
+    // 🚨 TTS 중이거나 TTS로 인해 멈춘 상태면 사용자 발화 무시
+    if (isProcessingTTS || (recognition && recognition.__pausedForTTS)) {
+        console.log("🎤 User utterance ignored during TTS processing or TTS pause:", utterance);
         return;
     }
-
-    console.log("Content Script: Sending user utterance to background for NLU processing:", utterance);
-    // MCP 서버/background.js로 사용자 발화 전체를 전송
-    chrome.runtime.sendMessage({ type: "NLU_QUERY", utterance: utterance }, (response) => {
-        if (chrome.runtime.lastError) {
-            console.error("Content Script: Error sending message to background:", chrome.runtime.lastError.message, "Utterance was:", utterance);
-            speakText("Sorry, I couldn't process that request right now.");
-        } else {
-            console.log("Content Script: Received NLU response from background:", response);
-            if (response && response.speak) {
-                speakText(response.speak);
-            }
-            if (response && response.ui_update) {
-                // 향후 UI 업데이트 로직 (예: 요약 결과 표시)
-                // displayInOverlay(response.ui_update);
-            }
-            // 만약 response에 다음 행동(action)이 있다면 처리
-            // if (response && response.action === "click_element" && response.selector) {
-            //   const element = document.querySelector(response.selector);
-            //   if (element) element.click();
-            // }
-        }
+    
+    console.log(`Content Script: Sending user utterance to background for NLU processing: ${utterance}`);
+    
+    chrome.runtime.sendMessage({
+        type: "NLU_QUERY",
+        utterance: utterance
+    }, (response) => {  // Promise 대신 콜백 사용
+        console.log("Content Script: Received NLU response from background:", response);
     });
 }
 
-// TTS 큐 처리 함수 개선
+// 🚨 단일 processTTSQueue 함수 - 최종 강화 버전
 function processTTSQueue() {
     console.log("🔊 Queue check: isProcessingTTS =", isProcessingTTS, "queue length =", ttsQueue.length);
     
@@ -161,47 +163,143 @@ function processTTSQueue() {
     
     console.log("🔊 Content Script: Processing TTS from queue:", text);
     
-    // 기존 음성 완전히 중단
-    speechSynthesis.cancel();
-    console.log("🔊 speechSynthesis.cancel() called");
+    // 🚨 기존 타이머 정리
+    if (ttsTimeoutId) {
+        clearTimeout(ttsTimeoutId);
+        ttsTimeoutId = null;
+    }
     
-    // 잠시 대기 후 실행
+    // 🚨 강력한 음성인식 중지
+    console.log("🔊 Forcefully stopping speech recognition for TTS");
+    if (recognition) {
+        recognition.__pausedForTTS = true;
+        recognition.__manualStop = true;
+    }
+    
+    try {
+        if (isRecognizing) {
+            recognition.stop();
+            console.log("🔊 Recognition.stop() called");
+        }
+    } catch (e) {
+        console.warn("🔊 Error stopping recognition:", e);
+    }
+    
+    // 음성인식이 완전히 멈출 때까지 대기
     setTimeout(() => {
-        console.log("🔊 About to create utterance for:", text);
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'en-US';
-        utterance.rate = 0.9;
-        utterance.pitch = 1;
-        utterance.volume = 1.0;
+        isRecognizing = false; // 강제로 상태 리셋
+        console.log("🔊 Recognition forcefully marked as stopped");
         
-        utterance.onstart = () => {
-            console.log('🔊 Content Script: TTS started from queue:', text.substring(0, 50));
-        };
+        // 기존 음성 완전히 중단
+        speechSynthesis.cancel();
+        console.log("🔊 speechSynthesis.cancel() called");
         
-        utterance.onend = () => {
-            console.log('🔊 Content Script: TTS ended from queue');
-            isProcessingTTS = false;
-            // 다음 큐 처리
-            setTimeout(() => processTTSQueue(), 100);
-        };
+        // TTS 실행
+        setTimeout(() => {
+            console.log("🔊 About to create utterance for:", text);
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'en-US';
+            utterance.rate = 0.9;
+            utterance.pitch = 1;
+            utterance.volume = 1.0;
+            
+            // 🚨 강제 타이머 - TTS가 끝나지 않을 경우 대비
+            ttsTimeoutId = setTimeout(() => {
+                console.warn("🔊 TTS forced timeout - restarting recognition");
+                isProcessingTTS = false;
+                if (recognition) {
+                    recognition.__pausedForTTS = false;
+                    recognition.__manualStop = false;
+                }
+                
+                if (extensionIsEnabled) {
+                    setTimeout(() => {
+                        try {
+                            if (!isRecognizing) {
+                                recognition.start();
+                                console.log("🔊 Recognition force-restarted after timeout");
+                            }
+                        } catch (e) {
+                            console.warn("🔊 Error force-restarting recognition:", e);
+                        }
+                    }, 1000);
+                }
+                
+                setTimeout(() => processTTSQueue(), 2000);
+            }, 8000); // 8초 타이머
+            
+            utterance.onstart = () => {
+                console.log('🔊 Content Script: TTS started from queue:', text.substring(0, 50));
+            };
+            
+            utterance.onend = () => {
+                console.log('🔊 Content Script: TTS ended from queue');
+                
+                // 타이머 정리
+                if (ttsTimeoutId) {
+                    clearTimeout(ttsTimeoutId);
+                    ttsTimeoutId = null;
+                }
+                
+                isProcessingTTS = false;
+                if (recognition) {
+                    recognition.__pausedForTTS = false;
+                    recognition.__manualStop = false;
+                }
+                
+                // 🚨 TTS 종료 후 음성인식 재시작 (더 긴 딜레이)
+                setTimeout(() => {
+                    if (extensionIsEnabled && !isRecognizing) {
+                        console.log("🔊 Restarting speech recognition after TTS");
+                        try {
+                            recognition.start();
+                        } catch (e) {
+                            console.warn("🔊 Error restarting recognition after TTS:", e);
+                        }
+                    }
+                }, 1500); // 1.5초 대기
+                
+                // 다음 큐 처리
+                setTimeout(() => processTTSQueue(), 2000);
+            };
+            
+            utterance.onerror = (event) => {
+                console.error('🔊 Content Script: TTS error from queue:', event.error);
+                
+                // 타이머 정리
+                if (ttsTimeoutId) {
+                    clearTimeout(ttsTimeoutId);
+                    ttsTimeoutId = null;
+                }
+                
+                isProcessingTTS = false;
+                if (recognition) {
+                    recognition.__pausedForTTS = false;
+                    recognition.__manualStop = false;
+                }
+                
+                // 에러 시에도 음성인식 재시작
+                setTimeout(() => {
+                    if (extensionIsEnabled && !isRecognizing) {
+                        console.log("🔊 Restarting speech recognition after TTS error");
+                        try {
+                            recognition.start();
+                        } catch (e) {
+                            console.warn("🔊 Error restarting recognition after TTS error:", e);
+                        }
+                    }
+                }, 2000);
+                
+                setTimeout(() => processTTSQueue(), 3000);
+            };
+            
+            console.log("🔊 About to call speechSynthesis.speak()");
+            speechSynthesis.speak(utterance);
+            console.log("🔊 speechSynthesis.speak() called successfully");
+            
+        }, 300);
         
-        utterance.onerror = (event) => {
-            console.error('🔊 Content Script: TTS error from queue:', event.error);
-            console.error('🔊 Content Script: TTS error details:', {
-                error: event.error,
-                type: event.type,
-                target: event.target,
-                utterance: text.substring(0, 50)
-            });
-            isProcessingTTS = false;
-            // 에러 발생 시에도 다음 큐 처리
-            setTimeout(() => processTTSQueue(), 500);
-        };
-        
-        console.log("🔊 About to call speechSynthesis.speak()");
-        speechSynthesis.speak(utterance);
-        console.log("🔊 speechSynthesis.speak() called successfully");
-    }, 200);
+    }, 500); // 음성인식 중지 대기
 }
 
 // 기존 speakText 함수를 큐 시스템으로 교체
@@ -386,10 +484,6 @@ chrome.storage.local.get('extensionEnabled', (data) => {
 
   if (extensionIsEnabled) {
     console.log("Content Script: Extension is marked as enabled in storage. If on a mail page, recognition might start if triggered.");
-    // 페이지 로드 시 자동으로 시작할지 여부는 정책에 따라 결정
-    // 만약 자동으로 시작하게 하려면, 여기서 startRecognition() 호출
-    // 예: if (isMailPage()) { startRecognition(); }
-    // 현재는 팝업에서 명시적으로 켤 때만 시작하도록 되어 있으므로, 여기서는 호출하지 않음.
   }
 });
 
