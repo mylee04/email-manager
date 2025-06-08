@@ -1,19 +1,22 @@
 {
   "manifest_version": 3,
-  "name": "Voice-base AI email Assistant",
-  "version": "0.1.0",
-  "description": "This is AI assistant to manage the Gmail/Outlook emails via voice",
+  "name": "My Email AI",
+  "version": "1.0",
+  "description": "AI-powered email management assistant",
   "permissions": [
-    "storage",      
-    "activeTab",    
-    "scripting",    
-    "tts"       
+    "storage",
+    "identity",
+    "tabs",
+    "activeTab",
+    "scripting",
+    "cookies",
+    "webNavigation"
   ],
   "host_permissions": [
+    "https://*.supabase.co/*",
     "https://mail.google.com/*",
-    "https://outlook.live.com/*",
     "https://outlook.office.com/*",
-    "http://localhost:3000/*"
+    "https://outlook.live.com/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -22,12 +25,17 @@
     {
       "matches": [
         "https://mail.google.com/*",
-        "https://outlook.live.com/*",
-        "https://outlook.office.com/*"
+        "https://outlook.office.com/*",
+        "https://outlook.live.com/*"
       ],
-      "js": ["content.js"]
+      "js": ["dom-service.js", "content.js"],
+      "run_at": "document_idle"
     }
   ],
+  "web_accessible_resources": [{
+    "resources": ["browser-use/*"],
+    "matches": ["<all_urls>"]
+  }],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
