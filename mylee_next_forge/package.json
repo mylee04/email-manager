@@ -41,6 +41,7 @@
     "@clack/prompts": "^0.11.0",
     "@google/generative-ai": "^0.24.1",
     "@playwright/test": "^1.52.0",
+    "@supabase/supabase-js": "^2.50.0",
     "basehub": "^8.2.9",
     "browser-use": "^0.0.1",
     "commander": "^14.0.0",
