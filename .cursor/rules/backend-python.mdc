@@ -1,0 +1,228 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Python Backend Development Rules
+
+## Server Architecture (server.py)
+
+### FastAPI WebSocket Server
+```python
+# WebSocket endpoint pattern
+@app.websocket("/ws/speech")
+async def websocket_speech_endpoint(websocket: WebSocket):
+    # 1. Accept connection and create session
+    # 2. Start speech processing thread
+    # 3. Handle audio streaming
+    # 4. Process control messages
+    # 5. Cleanup on disconnect
+```
+
+### Session Management Pattern
+```python
+# Session state tracking
+@dataclass
+class ConversationState:
+    session_id: str
+    status: str  # 'idle' | 'listening' | 'processing_stt' | 'awaiting_ai' | 'ai_responding' | 'ready_for_input'
+    context: ConversationContext
+    websocket_connected: bool = False
+    speech_thread_active: bool = False
+```
+
+### Threading Model
+- **Main Thread**: FastAPI/WebSocket handling
+- **Speech Thread**: Google Speech API streaming
+- **Queue Pattern**: Audio data passed via `queue.Queue`
+
+### Error Handling Patterns
+```python
+# Always use try-except for external services
+try:
+    # Google Speech API calls
+    responses = speech_client.streaming_recognize(config, requests_iterator)
+except Exception as e:
+    logger.error(f"[Session {session_id}] Speech API error: {str(e)}")
+    # Attempt recovery or graceful degradation
+```
+
+## Google Cloud Integration
+
+### Speech-to-Text Configuration
+```python
+config = speech.StreamingRecognitionConfig(
+    config=speech.RecognitionConfig(
+        encoding=speech.RecognitionConfig.AudioEncoding.WEBM_OPUS,
+        sample_rate_hertz=16000,
+        language_code="en-US",
+        enable_automatic_punctuation=True,
+        model="latest_short",
+        use_enhanced=True,
+    ),
+    interim_results=True,
+    single_utterance=False,  # For continuous conversation
+)
+```
+
+### LLM Integration (Gemini)
+```python
+# ✅ DO: Use quota-saving configuration
+llm_client = ChatGoogleGenerativeAI(
+    model="gemini-2.0-flash-exp",
+    temperature=0.1,
+    max_tokens=512,  # Limited for quota
+    max_retries=1,
+    timeout=30
+)
+
+# ❌ DON'T: Use request_timeout (deprecated)
+# Use 'timeout' instead
+```
+
+## WebSocket Message Protocol
+
+### Incoming Messages
+```python
+# Binary data (audio)
+if "bytes" in message:
+    audio_queue.put(message["bytes"])
+
+# Text data (control)
+elif "text" in message:
+    control_msg = json.loads(message["text"])
+    if control_msg.get("type") == "STOP_RECORDING":
+        # Handle stop
+    elif control_msg.get("type") == "KEEP_ALIVE":
+        # Send acknowledgment
+```
+
+### Outgoing Messages
+```python
+# Status updates
+await websocket.send_text(json.dumps({
+    "type": "ready_for_next",
+    "status": "Ready for your next command",
+    "session_id": session_id,
+    "timestamp": datetime.now().isoformat()
+}))
+
+# Recognition results
+await websocket.send_text(json.dumps({
+    "transcript": transcript,
+    "confidence": confidence,
+    "is_final": is_final,
+    "ai_response": ai_response,
+    "processing": processing_status
+}))
+```
+
+## Browser-Use Agent Integration
+
+### Agent Creation Pattern
+```python
+# ✅ DO: Reuse browser sessions
+browser_session = conversation_manager.get_or_create_browser_session(session_id)
+agent = Agent(
+    task=task_instruction,
+    llm=llm_client,
+    browser_session=browser_session
+)
+
+# ❌ DON'T: Create new browser for each command
+```
+
+### Task Instruction Format
+```python
+# Clear, specific instructions
+"Check for unread emails in Gmail inbox, count how many there are, and provide a detailed summary of the senders and subjects."
+
+# Not vague instructions
+"Check emails"  # Too generic
+```
+
+## Logging Best Practices
+
+### Session-based Logging
+```python
+# ✅ DO: Include session ID in all logs
+logger.info(f"[Session {session_id}] Processing command: {command}")
+
+# ❌ DON'T: Generic logging
+logger.info("Processing command")
+```
+
+### Log Levels
+- **INFO**: Session lifecycle, major state changes
+- **DEBUG**: Audio chunk details, interim results
+- **WARNING**: Recoverable errors, timeouts
+- **ERROR**: Exceptions, API failures
+
+## Performance Optimization
+
+### Audio Processing
+- Stream audio in 250ms chunks
+- Use queues for thread communication
+- Clear queue before restarting streams
+
+### API Rate Limiting
+```python
+# Global cooldown for AI requests
+AI_REQUEST_COOLDOWN = 2.0
+if current_time - last_ai_request_time < AI_REQUEST_COOLDOWN:
+    # Use fallback or wait
+```
+
+### Memory Management
+- Clean up browser sessions on disconnect
+- Use context managers for resources
+- Implement proper session cleanup
+
+## Security Patterns
+
+### Environment Variables
+```python
+# ✅ DO: Use environment variables
+os.getenv('GOOGLE_API_KEY')
+os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
+
+# ❌ DON'T: Hardcode credentials
+api_key = "AIza..."  # Never do this
+```
+
+### CORS Configuration
+```python
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "chrome-extension://...",  # Specific extension ID
+        "https://mail.google.com",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+```
+
+## Testing Patterns
+
+### Local Development
+```bash
+# Set up environment
+export GOOGLE_APPLICATION_CREDENTIALS="service-account-key.json"
+export GOOGLE_API_KEY="your-key"
+
+# Run with auto-reload
+python server.py  # Uses uvicorn with reload=True
+```
+
+### Debug Mode
+```python
+# Enable detailed logging
+logging.basicConfig(level=logging.DEBUG)
+
+# Add debug endpoints
+@app.get("/api/debug/sessions")
+async def debug_sessions():
+    return conversation_manager.active_sessions
+```

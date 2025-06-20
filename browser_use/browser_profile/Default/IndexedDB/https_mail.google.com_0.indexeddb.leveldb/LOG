@@ -1,0 +1,12 @@
+2025/06/18-07:05:53.816 1feb8c8 Reusing MANIFEST /Users/mylee/Library/CloudStorage/OneDrive-Deloitte(O365D)/mylee/hack/email-manager/browser_use/browser_profile/Default/IndexedDB/https_mail.google.com_0.indexeddb.leveldb/MANIFEST-000001
+2025/06/18-07:05:53.816 1feb8c8 Recovering log #52
+2025/06/18-07:05:53.821 1feb8c8 Reusing old log /Users/mylee/Library/CloudStorage/OneDrive-Deloitte(O365D)/mylee/hack/email-manager/browser_use/browser_profile/Default/IndexedDB/https_mail.google.com_0.indexeddb.leveldb/000052.log 
+2025/06/18-07:05:54.441 1feb8c8 Compacting 1@1 + 1@2 files
+2025/06/18-07:05:54.451 1feb8c8 Generated table #55@1: 147 keys, 546910 bytes
+2025/06/18-07:05:54.451 1feb8c8 Compacted 1@1 + 1@2 files => 546910 bytes
+2025/06/18-07:05:54.453 1feb8c8 compacted to: files[ 0 0 1 0 0 0 0 ]
+2025/06/18-07:05:54.453 1feb8c8 Delete type=2 #51
+2025/06/18-07:05:54.453 1feb8c8 Delete type=2 #53
+2025/06/18-07:05:56.454 1feb8c8 Level-0 table #57: started
+2025/06/18-07:05:56.471 1feb8c8 Level-0 table #57: 3139850 bytes OK
+2025/06/18-07:05:56.474 1feb8c8 Delete type=0 #52

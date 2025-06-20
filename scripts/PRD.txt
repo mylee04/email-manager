@@ -1,0 +1,139 @@
+# Product Requirements Document
+
+## 1. Executive Summary
+이메일 관리 비서는 사용자가 음성 명령을 통해 Gmail 및 Outlook 이메일을 쉽게 관리하고, 이메일 작성과 전송, 중요 이메일 우선 처리, 미팅 스케줄링까지 자동화하는 AI 기반 Chrome 확장 프로그램이다. 이 서비스는 빠른 이메일 처리와 음성 인터페이스라는 차별화를 통해, 이메일을 많이 사용하는 직군의 효율성을 극대화한다.
+
+## 2. Problem Statement
+현대 직장인 및 전문가는 매일 수많은 이메일에 대응해야 하며, 이를 빠르고 효율적으로 관리하는 데 많은 시간을 소비한다. 특히, 반복적인 이메일 확인, 요약, 응답, 미팅 스케줄링 과정을 수동으로 처리하는 것은 번거롭고 비효율적이다. 기존 솔루션은 수동 인터페이스에 치우쳐있으며, 음성 제어 및 자동화 수준이 낮아 사용자의 생산성 제고에 한계가 있다.
+
+## 3. Goals and Objectives
+- Primary Goal: 사용자가 음성 명령으로 이메일 확인, 요약, 작성, 전송 및 미팅 일정까지 쉽고 빠르게 처리할 수 있는 AI 이메일 비서를 제공한다.
+- Secondary Goals:
+    - Gmail 및 Outlook과의 완벽한 연동
+    - Chrome 및 타 웹 브라우저와 확장성 높은 연동 제공
+    - 최소 1-2문장 요약 제공을 통한 정보 전달 효율화
+- Success Metrics:
+    - 일일/주간 ACTIVE USER 수
+    - 이메일 처리 소요 시간 절감률
+    - 음성 명령 성공 처리율
+    - 이메일 회신 및 미팅 생성 건수
+
+## 4. Target Audience
+### Primary Users
+- 이메일을 가장 많이 사용하는 직장인, 프리랜서, 스타트업, 경영진 등
+- 신속한 응답 및 미팅 예약을 필요로 하는 전문가
+- 멀티태스킹 혹은 이동 중 손이 자유롭지 않은 사용자
+
+### Secondary Users
+- 팀 및 조직 관리자(팀 효율성 모니터링/도입)
+- IT/보안 부서(확장 기능 배포 및 모니터링)
+- Chrome Web Store 사용자
+
+## 5. User Stories
+- "바쁜 프로덕트 매니저로서, 이메일을 음성으로 요약받고 급한 순서대로 처리하고 싶다."
+- "회의가 잦은 마케터로서, 이메일 내용을 듣고 바로 미팅 예약까지 음성으로 끝내고 싶다."
+- "이동이 잦은 영업 담당자로서, 스마트폰이나 랩탑에서 손대지 않고 이메일 확인, 답장, 미팅 스케줄링을 하고 싶다."
+- "컴퓨터 사용이 익숙하지 않은 사용자도 클릭 몇 번 없이 자연스럽게 음성으로 이메일을 관리하고 싶다."
+
+## 6. Functional Requirements
+
+### Core Features
+- **음성 명령 기반 이메일 요약 및 분류**
+    - 사용자가 "오늘 받은 중요한 메일 요약해줘"라고 말하면 AI가 1~2문장으로 읽지 않은 이메일을 요약하여 설명
+    - Acceptance Criteria: 특정 음성 명령에 대해 높은 정확성(>85%)으로 요약 수행
+- **AI 자동 Draft 작성 & 전송 플로우**
+    - 사용자가 음성으로 답장/작성 명령 시 draft 자동 작성, 사용자 확인 후 전송
+    - Acceptance Criteria: draft가 사용자 의도와 부합해야 하며, 전송 전 사용자 검수 및 승인 단계 제공
+- **이메일 긴급도 기반 우선 처리**
+    - AI가 이메일 긴급도를 분류, 급한 메일부터 우선 순서대로 안내 및 처리
+    - Acceptance Criteria: 우선순위 분류 모델의 F1 Score > 0.8
+- **미팅 스케줄러와의 자연스러운 연동**
+    - 메일 내용 분석 후 미팅이 필요할 경우 음성 명령으로 바로 캘린더 초대 및 미팅 생성
+    - Acceptance Criteria: 미팅 생성까지 전 과정이 음성으로 연결되어야 함
+
+### Supporting Features
+- **Gmail/Outlook 웹 버전 완전 제어**
+    - 화면 내 버튼 위치, 기능을 AI가 인식 & 제어
+    - Acceptance Criteria: 실제 이메일 주요 기능(읽기, 작성, 삭제, 전달 등)에 대한 전체 자동화
+- **Chrome Extension으로 손쉬운 설치/삭제**
+    - 사용자는 클릭 2~3번에 확장 프로그램을 등록 및 제거 가능
+- **웹 브라우저/OS 호환성 지원**
+    - 크롬 기반 외 Edge, Brave 등 Chromium 기반 브라우저 지원
+- **설정 및 음성 언어 변경**
+    - 사용자 맞춤 언어 및 음성 옵션 선택 가능
+
+## 7. Non-Functional Requirements
+- Performance: 음성 명령 응답 2초 이내, 이메일 요약/처리 5초 이내
+- Security: OAuth2 인증(구글, MS), 사용자 데이터 암호화, 서버 미저장 원칙
+- Usability: 사용자가 1~2회 클릭/음성만으로 모든 기능 접근 가능
+- Scalability: 10만 명 동시 사용자 처리 가능 구조
+- Compatibility: 최신 Chrome, Edge, Brave 지원, i18n(다국어 지원)
+
+## 8. Technical Considerations
+- Architecture: Next.js 기반 프론트엔드 + Supabase 백엔드, Chrom Extension Manifest V3 사용
+- Browser Automation: browser-use, skyvern, LLM(예: Gemini) 기반 UI 제어 및 추론 로직
+- Voice Pipeline: ElevenLabs(TTS)로 음성 피드백, STT 엔진 연동
+- Integration: 구글/마이크로소프트 OAuth, 캘린더 API
+- Data: 최소한의 유저 설정/로그만 저장, 개인정보 보호 준수
+- Third-party dependencies: Gemini LLM, ElevenLabs, Supabase, Clerk(인증), next-forge
+
+## 9. Success Metrics and KPIs
+- DAU/WAU
+- 평균 이메일 처리 시간(음성 사용 vs 비사용)
+- 음성 명령 인식/실행 성공률
+- 사용자 NPS/User Satisfaction
+- Chrome Store Downloads & MAU
+
+## 10. Timeline and Milestones
+- Phase 1 (MVP, 1개월)
+    - Gmail 읽기/요약/음성 명령/답장 기능
+    - Chrome Extension 기본구조와 배포
+    - OAuth 인증 연동
+- Phase 2 (2~3개월)
+    - Outlook 지원, 미팅 스케줄링 및 캘린더 연동
+    - 이메일 우선순위 자동 분류
+    - 음성 언어 옵션 추가, Edge 등 타 브라우저 지원
+- Phase 3 (4~6개월)
+    - 사용자 설정 고도화, 향상된 AI 기능(문맥 추론, Error handling)
+    - 조직 도입 기능(어드민, 통계 대시보드)
+    - 글로벌 마켓 진출을 위한 다국어지원
+
+## 11. Risks and Mitigation
+- Technical Risks: Gmail/Outlook Web UI update → 스크린샷-기반 제어 방식을 지속 업데이트, fallback 처리
+- Business Risks: 확장프로그램 배포 심사 지연 → 구글 정책 미리 파악, Modular 구조로 빠른 수정 가능
+- User Adoption Risks: 음성 인식 정확도 이슈, 사용자 프라이버시 우려 → 대체 입력 방식, 강력한 개인정보 보호 명시
+
+## 12. Future Considerations
+- 모바일(앱 또는 모바일 크롬) 지원 확장
+- AI agent 기반의 다양한 자동 업무 기능(예약, 설문, 첨부파일 관리 등)
+- 조직 단위 라이선스, 관리자용 Analytics 대시보드
+- 완전한 이메일 자동화(라벨링, 정렬, 자동 분류 및 클러스터링)
+- 오픈API 제공으로 타 서비스(슬랙, Notion 등)와 연동
+
+## Current Status
+
+### Completed Tasks
+1. ✅ **Chrome 확장 프로그램 초기 구조 설계 및 세팅**
+   - Plasmo 프레임워크 기반 확장 프로그램 구조 완성
+   - Manifest V3 적용, 팝업/콘텐츠 스크립트/백그라운드 스크립트 구현
+   - Chrome 브라우저에서 정상 로딩 및 실행 확인
+
+2. ✅ **확장 프로그램-Python 백엔드 통신 파이프라인 구축**
+   - FastAPI 기반 Python 서버 구현
+   - Chrome 확장 프로그램에서 로컬 서버로 fetch 요청/응답 파이프라인 완성
+   - CORS 설정 및 기본 통신 채널 확립
+
+3. 🔄 **음성 명령 인식(STT) 연동 및 기본 파이프라인 구현** (진행 중)
+   - Google Cloud Speech-to-Text API 연동 완료
+   - 서비스 계정 인증 설정 완료
+   - 현재 이슈: REST API 방식에서 gRPC 스트리밍 방식으로 전환 필요
+   - 실시간 연속 음성 인식을 위한 WebSocket + gRPC 스트리밍 구조 재설계 중
+
+### Current Technical Challenge
+현재 Google Cloud Speech-to-Text를 REST API 방식으로 사용하고 있어 실시간 연속 음성 인식에 한계가 있음. 
+진정한 연속 대화형 음성 인식을 위해서는 gRPC 스트리밍 API 방식으로 전환이 필요한 상황.
+
+### Next Immediate Steps
+1. Google Cloud Speech-to-Text gRPC 스트리밍 API로 전환
+2. WebSocket 기반 실시간 오디오 스트리밍 구현
+3. 연속 음성 인식 및 실시간 결과 처리 파이프라인 완성 

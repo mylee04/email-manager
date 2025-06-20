@@ -1,0 +1,193 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Email Assistant Project Architecture
+
+This project is an AI-powered Gmail voice assistant that allows users to control Gmail using voice commands through a Chrome Extension.
+
+## Project Structure
+
+```
+email-manager/
+├── browser_use/                 # Python Backend Server
+│   ├── server.py               # FastAPI WebSocket server
+│   ├── agent/                  # Browser-Use Agent modules
+│   ├── browser/                # Browser automation
+│   ├── controller/             # Control logic
+│   ├── dom/                    # DOM manipulation
+│   └── telemetry/              # Usage tracking
+├── plasmo-my-email-ai/         # Chrome Extension (Plasmo Framework)
+│   ├── src/
+│   │   ├── background.ts       # Service worker
+│   │   ├── popup.tsx          # Extension popup UI
+│   │   ├── contents/
+│   │   │   └── email-handler.ts # Gmail content script
+│   │   └── components/
+│   │       └── VoiceRecognition.tsx # Voice UI component
+│   └── build/                  # Extension build output
+└── .taskmaster/                # Task management system
+    ├── tasks/                  # Task definitions
+    ├── reports/                # Analysis reports
+    └── config.json            # Configuration
+```
+
+## Technology Stack
+
+### Backend (browser_use/)
+- **Framework**: FastAPI with WebSocket support
+- **Language**: Python 3.13
+- **Key Libraries**:
+  - `google-cloud-speech`: Speech-to-text processing
+  - `langchain-google-genai`: LLM integration (Gemini)
+  - `browser-use`: Browser automation framework
+  - `asyncio`: Asynchronous programming
+  - `threading`: Multi-threaded audio processing
+
+### Frontend (plasmo-my-email-ai/)
+- **Framework**: Plasmo (Chrome Extension framework)
+- **Language**: TypeScript/React
+- **Key Libraries**:
+  - `react`: UI components
+  - `@plasmohq/messaging`: Extension messaging
+  - `@plasmohq/storage`: Extension storage
+- **Build Tool**: Parcel (via Plasmo)
+
+### Communication Protocol
+- **WebSocket**: Real-time bidirectional communication
+- **Audio Format**: WEBM_OPUS (16kHz, mono)
+- **Control Messages**: JSON format
+- **Port**: 8000 (backend server)
+
+## Core Components
+
+### 1. Chrome Extension Components
+
+**Popup UI (popup.tsx)**
+- Toggle button for voice assistant
+- Real-time status display
+- Voice recognition feedback
+
+**Content Script (email-handler.ts)**
+- WebSocket client for audio streaming
+- DOM manipulation for Gmail
+- Voice activity detection
+- Continuous conversation mode
+
+**Background Service (background.ts)**
+- Extension state management
+- Message routing between components
+- Server health checks
+
+**Voice Recognition Component (VoiceRecognition.tsx)**
+- MediaRecorder API integration
+- Real-time transcription display
+- AI response visualization
+
+### 2. Backend Server Components
+
+**WebSocket Server (server.py)**
+- Session-based conversation management
+- Google Speech-to-Text integration
+- LLM processing with Gemini
+- Browser-Use Agent coordination
+
+**Key Features**:
+- Continuous conversation support
+- Context-aware responses
+- Gmail automation capabilities
+- Session cleanup and management
+
+## Data Flow
+
+1. **Voice Input**: User speaks → MediaRecorder captures audio
+2. **Audio Streaming**: WebSocket sends audio chunks to backend
+3. **Speech Recognition**: Google Speech API transcribes audio
+4. **AI Processing**: Gemini LLM analyzes intent
+5. **Action Execution**: Browser-Use Agent performs Gmail actions
+6. **Response**: AI response sent back to extension
+
+## Key Patterns & Conventions
+
+### WebSocket Message Types
+```typescript
+// Audio data (binary)
+ws.send(audioBlob)
+
+// Control messages (JSON)
+ws.send(JSON.stringify({
+  type: 'STOP_RECORDING' | 'KEEP_ALIVE',
+  reason?: string,
+  session_id?: string
+}))
+```
+
+### Session Management
+- Each WebSocket connection creates a unique session
+- Sessions track conversation history
+- Automatic cleanup on disconnect
+- Support for continuous conversations
+
+### Error Handling
+- Graceful WebSocket reconnection (max 5 attempts)
+- Audio timeout prevention
+- Session state recovery
+- User-friendly error messages
+
+### Security Considerations
+- Service account authentication for Google APIs
+- CORS configuration for extension
+- Environment variable management
+- No sensitive data in client code
+
+## Development Workflow
+
+### Backend Setup
+```bash
+cd browser_use
+pip install -r requirements.txt
+# Set up Google Cloud credentials
+export GOOGLE_APPLICATION_CREDENTIALS="service-account-key.json"
+export GOOGLE_API_KEY="your-gemini-api-key"
+python server.py
+```
+
+### Extension Development
+```bash
+cd plasmo-my-email-ai
+pnpm install
+pnpm dev  # Development with hot reload
+pnpm build  # Production build
+```
+
+### Testing Flow
+1. Start backend server
+2. Load extension in Chrome (developer mode)
+3. Navigate to Gmail
+4. Click extension icon and toggle ON
+5. Speak commands like "check my emails"
+
+## Common Voice Commands
+- "Hello, can you hear me?" - Test connection
+- "Check my emails" - List unread emails
+- "Compose new email" - Open compose window
+- "Reply to first email" - Open reply interface
+
+## Performance Optimizations
+- Audio chunk size: 250ms intervals
+- Max tokens: 512 (quota management)
+- Streaming recognition for real-time feedback
+- Session reuse for continuous conversations
+
+## Debugging Tips
+- Check browser console for WebSocket status
+- Monitor backend logs for session lifecycle
+- Verify microphone permissions
+- Check CORS configuration if connection fails
+
+## Task Management (.taskmaster/)
+- Used for project planning and tracking
+- Tasks defined in JSON format
+- Complexity analysis reports
+- Development workflow documentation

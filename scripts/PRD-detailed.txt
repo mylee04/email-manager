@@ -1,0 +1,313 @@
+# AI 이메일 관리 시스템 - 상세 PRD
+
+## 1. Executive Summary
+AI 이메일 관리 시스템은 Chrome 확장 프로그램, Python 백엔드, Next.js 대시보드로 구성된 통합 솔루션입니다. 사용자가 음성 명령을 통해 Gmail/Outlook을 자동으로 제어하고, AI 기반 이메일 처리를 수행할 수 있습니다.
+
+## 2. 현재 구현 상태 및 기술 아키텍처
+
+### 2.1 완료된 컴포넌트
+#### Chrome 확장 프로그램 (plasmo-my-email-ai/)
+- **프레임워크**: Plasmo (Manifest V3)
+- **구조**: 
+  - `src/popup.tsx`: 사용자 인터페이스
+  - `src/background.ts`: 메시지 라우팅 및 백그라운드 처리
+  - `src/contents/email-handler.ts`: Gmail/Outlook DOM 조작
+  - `lib/api.ts`: 백엔드 API 통신 레이어
+- **현재 상태**: 기본 구조 완성, API 통신 가능
+
+#### Python 백엔드 (browser_use/)
+- **프레임워크**: FastAPI + Browser-Use
+- **주요 파일**:
+  - `server.py`: FastAPI 서버 (포트 8000)
+  - `agent_service.py`: AI 에이전트 로직
+  - `controller_service.py`: 브라우저 제어 로직
+  - `dom_service.py`: DOM 조작 서비스
+- **API 엔드포인트**:
+  - `GET /api/health`: 서버 상태 확인
+  - `POST /api/command`: 음성 명령 처리
+- **현재 상태**: 기본 서버 구동, CORS 설정 완료
+
+### 2.2 현재 진행 중인 문제
+#### 음성 인식 시스템 (🔄 진행 중)
+- **현재 구현**: Google Cloud Speech-to-Text REST API
+- **문제점**: 
+  - 실시간 연속 음성 인식 불가
+  - 마이크 권한 문제 (Chrome Manifest V3 제약)
+  - "Extension context invalidated" 오류
+- **필요한 해결책**:
+  - gRPC 스트리밍 API로 전환
+  - WebSocket 기반 실시간 오디오 스트리밍
+  - Content Script에서 Web Speech API 사용
+
+## 3. 구체적인 기술 요구사항
+
+### 3.1 음성 인식 시스템 완성
+#### 목표
+- 실시간 연속 음성 인식 구현
+- Chrome Manifest V3 환경에서 마이크 권한 문제 해결
+
+#### 구현 방법
+1. **Web Speech API 활용**
+   ```javascript
+   // Content Script에서 실행
+   const recognition = new webkitSpeechRecognition();
+   recognition.continuous = true;
+   recognition.interimResults = true;
+   ```
+
+2. **gRPC 스트리밍 구현**
+   ```python
+   # Python 백엔드
+   import grpc
+   from google.cloud import speech
+   
+   def stream_recognition():
+       client = speech.SpeechClient()
+       config = speech.RecognitionConfig(...)
+       streaming_config = speech.StreamingRecognitionConfig(...)
+   ```
+
+3. **WebSocket 연결**
+   ```python
+   # FastAPI WebSocket 엔드포인트
+   @app.websocket("/ws/audio")
+   async def websocket_endpoint(websocket: WebSocket):
+       await websocket.accept()
+       # 실시간 오디오 스트리밍 처리
+   ```
+
+#### 성공 기준
+- 연속 음성 인식 2초 이내 응답
+- 마이크 권한 자동 허용
+- "이메일 읽어줘" 명령 85% 이상 인식률
+
+### 3.2 Gmail 자동화 시스템
+#### 목표
+- Playwright 기반 Gmail 완전 제어
+- 이메일 읽기, 작성, 전송 자동화
+
+#### 구현 방법
+1. **DOM 선택자 정의**
+   ```python
+   GMAIL_SELECTORS = {
+       'compose_button': '[gh="cm"]',
+       'to_field': 'input[name="to"]',
+       'subject_field': 'input[name="subjectbox"]',
+       'body_field': '[contenteditable="true"]',
+       'send_button': '[role="button"][data-tooltip="Send"]'
+   }
+   ```
+
+2. **브라우저 자동화 로직**
+   ```python
+   async def compose_email(page, to: str, subject: str, body: str):
+       await page.click(GMAIL_SELECTORS['compose_button'])
+       await page.fill(GMAIL_SELECTORS['to_field'], to)
+       await page.fill(GMAIL_SELECTORS['subject_field'], subject)
+       await page.fill(GMAIL_SELECTORS['body_field'], body)
+   ```
+
+#### 성공 기준
+- Gmail 로그인부터 이메일 전송까지 완전 자동화
+- 에러 복구 메커니즘 구현
+- 다양한 Gmail UI 버전 대응
+
+### 3.3 AI 통합 시스템
+#### 목표
+- 이메일 내용 분석 및 요약
+- 자연어 명령 처리
+- 자동 응답 생성
+
+#### 구현 방법
+1. **LLM API 통합**
+   ```python
+   from openai import OpenAI
+   
+   async def analyze_email(email_content: str):
+       response = await openai.chat.completions.create(
+           model="gpt-4",
+           messages=[
+               {"role": "system", "content": "이메일을 1-2문장으로 요약하세요."},
+               {"role": "user", "content": email_content}
+           ]
+       )
+       return response.choices[0].message.content
+   ```
+
+2. **명령어 파싱**
+   ```python
+   COMMAND_PATTERNS = {
+       r"이메일.*읽어.*줘": "read_emails",
+       r"답장.*작성.*해.*줘": "compose_reply",
+       r"새.*이메일.*작성": "compose_new"
+   }
+   ```
+
+#### 성공 기준
+- 이메일 요약 품질 평가 점수 4.0/5.0 이상
+- 명령어 인식률 90% 이상
+- 응답 생성 시간 3초 이내
+
+## 4. 상세 개발 로드맵
+
+### Phase 1: 음성 인식 시스템 완성 (우선순위: 최고)
+#### 작업 1.1: Web Speech API 구현
+- Content Script에서 SpeechRecognition 구현
+- 마이크 권한 관리 로직
+- 음성-텍스트 변환 파이프라인
+
+#### 작업 1.2: 실시간 스트리밍 구현
+- WebSocket 서버 구현
+- gRPC 스트리밍 클라이언트
+- 연속 음성 인식 로직
+
+#### 작업 1.3: 오류 처리 및 복구
+- Extension context 오류 해결
+- 네트워크 연결 실패 처리
+- 음성 인식 실패 시 대체 방안
+
+### Phase 2: Gmail 자동화 완성
+#### 작업 2.1: 기본 Gmail 조작
+- 로그인 자동화
+- 이메일 목록 읽기
+- 개별 이메일 내용 추출
+
+#### 작업 2.2: 이메일 작성 및 전송
+- 새 이메일 작성 자동화
+- 답장 작성 자동화
+- 첨부파일 처리
+
+#### 작업 2.3: 고급 기능
+- 이메일 검색 및 필터링
+- 라벨 관리
+- 대량 작업 처리
+
+### Phase 3: AI 통합 및 최적화
+#### 작업 3.1: 이메일 분석 AI
+- 이메일 내용 요약
+- 긴급도 분류
+- 감정 분석
+
+#### 작업 3.2: 자동 응답 생성
+- 맥락 기반 응답 생성
+- 사용자 스타일 학습
+- 응답 품질 검증
+
+#### 작업 3.3: 성능 최적화
+- 응답 시간 최적화
+- 메모리 사용량 최적화
+- 배치 처리 구현
+
+## 5. 기술 스택 상세
+
+### Frontend (Chrome Extension)
+- **언어**: TypeScript
+- **프레임워크**: Plasmo (React 기반)
+- **주요 라이브러리**:
+  - `@plasmohq/messaging`: 메시지 통신
+  - `webextension-polyfill`: 브라우저 호환성
+
+### Backend (Python)
+- **언어**: Python 3.11+
+- **프레임워크**: FastAPI
+- **주요 라이브러리**:
+  - `playwright`: 브라우저 자동화
+  - `google-cloud-speech`: 음성 인식
+  - `openai`: AI 모델 API
+  - `websockets`: 실시간 통신
+
+### Infrastructure
+- **개발 환경**: 로컬 개발 (포트 8000)
+- **배포**: Chrome Web Store (확장 프로그램)
+- **API 키 관리**: 환경 변수
+
+## 6. 구체적인 파일 구조
+
+```
+email-manager/
+├── plasmo-my-email-ai/          # Chrome 확장 프로그램
+│   ├── src/
+│   │   ├── popup.tsx            # 팝업 UI
+│   │   ├── background.ts        # 백그라운드 스크립트
+│   │   ├── contents/
+│   │   │   └── email-handler.ts # 콘텐츠 스크립트
+│   │   └── components/
+│   │       └── VoiceRecognition.tsx
+│   ├── lib/
+│   │   └── api.ts              # API 통신
+│   └── package.json
+├── browser_use/                 # Python 백엔드
+│   ├── server.py               # FastAPI 서버
+│   ├── agent_service.py        # AI 에이전트
+│   ├── controller_service.py   # 브라우저 제어
+│   ├── dom_service.py          # DOM 조작
+│   └── requirements.txt
+└── mylee_next_forge/           # Next.js 대시보드 (향후)
+```
+
+## 7. 현재 해결해야 할 구체적인 문제
+
+### 문제 1: 마이크 권한 차단
+- **현상**: "마이크 사용 권한이 차단되었습니다" 오류
+- **원인**: Chrome Manifest V3에서 popup context에서 마이크 접근 제한
+- **해결책**: Content Script에서 Web Speech API 사용
+
+### 문제 2: Extension Context Invalidated
+- **현상**: 확장 프로그램 재로드 시 컨텍스트 무효화
+- **원인**: 백그라운드 스크립트와 콘텐츠 스크립트 간 통신 오류
+- **해결책**: 메시지 전달 로직 개선 및 오류 처리
+
+### 문제 3: 실시간 음성 인식 한계
+- **현상**: REST API 방식으로 인한 지연
+- **원인**: 요청-응답 방식의 한계
+- **해결책**: WebSocket + gRPC 스트리밍 구현
+
+## 8. 성공 기준 및 테스트 시나리오
+
+### 기능 테스트
+1. **음성 인식 테스트**
+   - "이메일 읽어줘" 명령 인식률 85% 이상
+   - 연속 음성 인식 2초 이내 응답
+
+2. **Gmail 자동화 테스트**
+   - 로그인부터 이메일 전송까지 완전 자동화
+   - 다양한 Gmail 레이아웃에서 동작
+
+3. **AI 처리 테스트**
+   - 이메일 요약 품질 평가
+   - 자동 응답 적절성 검증
+
+### 성능 테스트
+- 메모리 사용량 100MB 이하
+- CPU 사용률 평상시 5% 이하
+- 네트워크 지연 시간 1초 이내
+
+## 9. 위험 요소 및 완화 방안
+
+### 기술적 위험
+1. **Gmail UI 변경**: 다중 선택자 전략 및 스크린샷 기반 백업
+2. **API 제한**: 요청 제한 관리 및 대체 API 준비
+3. **브라우저 호환성**: Chromium 기반 브라우저 테스트
+
+### 보안 위험
+1. **API 키 노출**: 환경 변수 및 암호화 저장
+2. **사용자 데이터**: 로컬 처리 원칙 및 최소 데이터 수집
+
+## 10. 다음 즉시 실행할 작업
+
+### 우선순위 1: 음성 인식 문제 해결
+1. Content Script에서 Web Speech API 구현
+2. 마이크 권한 자동 허용 로직
+3. 실시간 음성 스트리밍 파이프라인
+
+### 우선순위 2: Gmail 기본 자동화
+1. Gmail 로그인 자동화
+2. 이메일 목록 읽기 구현
+3. 기본 이메일 작성 기능
+
+### 우선순위 3: AI 통합 준비
+1. OpenAI API 통합
+2. 기본 명령어 파싱 로직
+3. 이메일 요약 기능 프로토타입
+
+이 상세한 PRD를 바탕으로 Task Master AI가 더 구체적이고 실행 가능한 작업을 생성할 수 있을 것입니다. 

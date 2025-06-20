@@ -1,0 +1,338 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Chrome Extension Development Rules (Plasmo)
+
+## Extension Architecture
+
+### Manifest Configuration (via Plasmo)
+```json
+// package.json plasmo configuration
+{
+  "manifest": {
+    "permissions": ["activeTab", "storage"],
+    "host_permissions": ["https://mail.google.com/*"]
+  }
+}
+```
+
+### Component Structure
+```
+src/
+├── popup.tsx           # Main popup UI
+├── background.ts       # Service worker
+├── contents/
+│   └── email-handler.ts # Gmail content script
+└── components/
+    └── VoiceRecognition.tsx # Voice UI component
+```
+
+## Content Script Patterns (email-handler.ts)
+
+### WebSocket Management
+```typescript
+// ✅ DO: Implement reconnection logic
+const MAX_RECONNECT_ATTEMPTS = 5;
+let reconnectAttempts = 0;
+
+function setupWebSocket() {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    return; // Already connected
+  }
+  
+  ws = new WebSocket('ws://localhost:8000/ws/speech');
+  ws.onopen = () => {
+    isWebSocketConnected = true;
+    reconnectAttempts = 0;
+  };
+  // ... handle reconnection
+}
+
+// ❌ DON'T: Create multiple connections
+// Always check existing connection first
+```
+
+### Audio Streaming Pattern
+```typescript
+// MediaRecorder setup
+mediaRecorder = new MediaRecorder(stream, {
+  mimeType: 'audio/webm;codecs=opus'
+});
+
+// Real-time streaming
+mediaRecorder.ondataavailable = (event) => {
+  if (event.data.size > 0 && shouldSendAudio) {
+    ws.send(event.data); // Send binary data
+  }
+};
+
+mediaRecorder.start(250); // 250ms chunks
+```
+
+### State Management
+```typescript
+// Global state flags
+let isRecording = false;
+let isProcessingCommand = false;
+let shouldSendAudio = true;
+let isContinuousMode = true;
+
+// Control audio transmission during processing
+if (result.is_final) {
+  isProcessingCommand = true;
+  shouldSendAudio = false; // Prevent timeout
+}
+```
+
+## Background Service Worker (background.ts)
+
+### Message Routing Pattern
+```typescript
+// ✅ DO: Return true for async responses
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'ASYNC_OPERATION') {
+    handleAsync()
+      .then(result => sendResponse(result))
+      .catch(error => sendResponse({ error }));
+    return true; // Keep channel open
+  }
+});
+
+// ❌ DON'T: Forget to return true for async
+```
+
+### Extension State Management
+```typescript
+// Persistent state via chrome.storage
+chrome.storage.local.set({ isEnabled });
+chrome.storage.local.get(['isEnabled'], (result) => {
+  isEnabled = result.isEnabled || false;
+});
+```
+
+## React Component Patterns (VoiceRecognition.tsx)
+
+### Component Lifecycle
+```typescript
+// ✅ DO: Clean setup/teardown
+useEffect(() => {
+  startRecording();
+  
+  return () => {
+    // Don't stop recording on unmount (continuous mode)
+    console.log("Voice recognition continues in background");
+  };
+}, []);
+
+// ❌ DON'T: Stop recording when popup closes
+// Let user explicitly control via toggle
+```
+
+### State Updates
+```typescript
+// Message handling pattern
+useEffect(() => {
+  const messageListener = (message: any) => {
+    if (message.type === 'VOICE_RECOGNITION_RESULT') {
+      setTranscript(message.transcript);
+      setConfidence(message.confidence);
+      if (message.ai_response) {
+        setAiResponse(message.ai_response);
+      }
+    }
+  };
+  
+  chrome.runtime.onMessage.addListener(messageListener);
+  return () => {
+    chrome.runtime.onMessage.removeListener(messageListener);
+  };
+}, []);
+```
+
+## Gmail DOM Manipulation
+
+### Safe DOM Queries
+```typescript
+// ✅ DO: Use specific selectors with fallbacks
+const composeButton = document.querySelector(
+  '[gh="cm"], [data-tooltip*="Compose"], [aria-label*="Compose"]'
+);
+
+// ❌ DON'T: Use brittle selectors
+const button = document.querySelector('.T-I.J-J5-Ji'); // Class names change
+```
+
+### Action Implementation
+```typescript
+function readGmailEmails() {
+  try {
+    // Check login status first
+    const accountInfo = document.querySelector('[aria-label*="Account"]');
+    if (!accountInfo) {
+      showNotification("❌ Gmail login required", 'error');
+      return;
+    }
+    
+    // Safe email extraction
+    const emailList = document.querySelectorAll('[role="main"] tr[id]');
+    const emails = Array.from(emailList).slice(0, 3).map(emailRow => {
+      // Extract with fallbacks
+      const sender = emailRow.querySelector('[email]')?.getAttribute('email') 
+                    || 'Unknown sender';
+      // ...
+    });
+  } catch (error) {
+    console.error("Gmail reading error:", error);
+  }
+}
+```
+
+## Communication Patterns
+
+### Chrome Extension Messaging
+```typescript
+// From content script to background
+chrome.runtime.sendMessage({ 
+  type: 'VOICE_COMMAND', 
+  command: transcript 
+});
+
+// From background to content script
+chrome.tabs.sendMessage(tabId, { 
+  type: 'START_VOICE_RECOGNITION' 
+});
+
+// From popup to background
+chrome.runtime.sendMessage({ 
+  type: 'TOGGLE_EXTENSION' 
+});
+```
+
+### WebSocket Messages
+```typescript
+// Binary audio data
+ws.send(audioBlob); // Direct binary send
+
+// JSON control messages
+ws.send(JSON.stringify({
+  type: 'STOP_RECORDING',
+  reason: 'User stopped voice recognition'
+}));
+
+// Keep-alive pattern
+ws.send(JSON.stringify({
+  type: 'KEEP_ALIVE',
+  session_id: sessionId
+}));
+```
+
+## UI/UX Patterns
+
+### Visual Feedback
+```typescript
+// Notification system
+function showNotification(message: string, className: string, duration = 5000) {
+  const notification = document.createElement('div');
+  notification.className = `voice-assistant-${className}`;
+  notification.textContent = message;
+  
+  // Style based on type
+  const colors = {
+    'ai-response': '#4CAF50',
+    'processing': '#FF9800',
+    'error': '#F44336',
+    'interim-result': '#9E9E9E'
+  };
+  
+  Object.assign(notification.style, {
+    position: 'fixed',
+    top: '20px',
+    right: '20px',
+    background: colors[className] || '#2196F3',
+    // ... animation
+  });
+}
+```
+
+### Continuous Conversation Mode
+```typescript
+// Handle ready_for_next signal
+if (result.type === 'ready_for_next') {
+  isProcessingCommand = false;
+  shouldSendAudio = true; // Resume audio
+  
+  // Keep MediaRecorder active
+  if (mediaRecorder?.state === 'recording') {
+    console.log('✅ Ready for next command');
+  }
+}
+```
+
+## Error Handling
+
+### WebSocket Errors
+```typescript
+ws.onerror = (error) => {
+  console.error('🚨 WebSocket error:', error);
+  isWebSocketConnected = false;
+  // Attempt reconnection
+  if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+    setTimeout(() => setupWebSocket(), 1000 * reconnectAttempts);
+  }
+};
+```
+
+### Permission Handling
+```typescript
+// Microphone permission
+try {
+  const stream = await navigator.mediaDevices.getUserMedia({ 
+    audio: {
+      sampleRate: 16000,
+      channelCount: 1,
+      echoCancellation: true,
+      noiseSuppression: true
+    } 
+  });
+} catch (error) {
+  if (error.name === 'NotAllowedError') {
+    showNotification('🎤 Microphone permission required', 'error');
+  }
+}
+```
+
+## Build & Development
+
+### Plasmo Commands
+```bash
+# Development with hot reload
+pnpm dev
+
+# Production build
+pnpm build
+
+# Package for distribution
+pnpm package
+```
+
+### Development Tips
+- Use `console.log` with prefixes: 🎤 🔌 📤 ✅ ❌
+- Test with Chrome DevTools open
+- Monitor Network tab for WebSocket
+- Check chrome://extensions for errors
+
+## Performance Considerations
+
+### Audio Processing
+- Use 16kHz sample rate for speech
+- Enable echo cancellation
+- Implement voice activity detection
+- Pause audio during AI processing
+
+### DOM Operations
+- Cache selectors when possible
+- Use querySelector over getElementsBy*
+- Batch DOM updates
+- Add debouncing for rapid events

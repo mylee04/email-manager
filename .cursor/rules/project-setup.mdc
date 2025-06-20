@@ -1,0 +1,302 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Project Setup & Configuration
+
+## Prerequisites
+
+### System Requirements
+- **Node.js**: 18+ (for Chrome Extension)
+- **Python**: 3.13+ (for backend server)
+- **pnpm**: Latest (for Plasmo)
+- **Chrome**: Latest (for extension testing)
+
+### Required Accounts
+- Google Cloud Platform account
+- Google Gemini API access
+- Gmail account for testing
+
+## Initial Setup
+
+### 1. Backend Setup (browser_use/)
+```bash
+# Install Python dependencies
+cd browser_use
+pip install -r requirements.txt
+
+# Create service account key
+# 1. Go to Google Cloud Console
+# 2. Create service account with Speech-to-Text permissions
+# 3. Download JSON key as service-account-key.json
+
+# Environment variables (.env)
+GOOGLE_APPLICATION_CREDENTIALS="service-account-key.json"
+GOOGLE_API_KEY="your-gemini-api-key"
+
+# Optional: Other LLM providers
+ANTHROPIC_API_KEY="your-key"
+OPENAI_API_KEY="your-key"
+```
+
+### 2. Extension Setup (plasmo-my-email-ai/)
+```bash
+# Install dependencies
+cd plasmo-my-email-ai
+pnpm install
+
+# Development
+pnpm dev
+
+# Get extension ID from chrome://extensions
+# Update CORS in server.py with actual ID
+```
+
+### 3. Task Management Setup (.taskmaster/)
+```bash
+# Initialize taskmaster
+npm install -g task-master-ai
+task-master init
+
+# Configure models
+task-master models --setup
+```
+
+## Environment Configuration
+
+### Backend Environment (.env)
+```bash
+# Required for Speech-to-Text
+GOOGLE_APPLICATION_CREDENTIALS="path/to/service-account-key.json"
+
+# Required for Gemini LLM
+GOOGLE_API_KEY="AIza..."
+
+# Optional LLM providers
+ANTHROPIC_API_KEY="sk-ant-..."
+OPENAI_API_KEY="sk-..."
+PERPLEXITY_API_KEY="pplx-..."
+MISTRAL_API_KEY="..."
+AZURE_OPENAI_API_KEY="..."
+AZURE_OPENAI_ENDPOINT="https://..."
+OPENROUTER_API_KEY="sk-or-..."
+XAI_API_KEY="..."
+OLLAMA_BASE_URL="http://localhost:11434/api"
+```
+
+### Extension Configuration
+```json
+// package.json - Plasmo configuration
+{
+  "name": "my-email-ai",
+  "displayName": "AI Email Assistant",
+  "version": "0.0.1",
+  "description": "Voice-controlled Gmail assistant",
+  "manifest": {
+    "permissions": ["activeTab", "storage"],
+    "host_permissions": ["https://mail.google.com/*"]
+  }
+}
+```
+
+### Task Management Configuration
+```json
+// .taskmaster/config.json
+{
+  "projectName": "email-manager",
+  "models": {
+    "main": "gemini-2.0-flash-exp",
+    "research": "perplexity/llama-3.1-sonar-large-128k-online",
+    "fallback": "gpt-4o-mini"
+  },
+  "maxTokens": 4000,
+  "temperature": 0.7
+}
+```
+
+## Development Workflow
+
+### 1. Start Backend Server
+```bash
+cd browser_use
+python server.py
+# Server runs on http://localhost:8000
+# WebSocket on ws://localhost:8000/ws/speech
+```
+
+### 2. Run Extension in Development
+```bash
+cd plasmo-my-email-ai
+pnpm dev
+# Creates dev build in build/chrome-mv3-dev
+# Load unpacked extension from this directory
+```
+
+### 3. Testing Flow
+1. Open Chrome and go to `chrome://extensions`
+2. Enable Developer mode
+3. Load unpacked → Select `build/chrome-mv3-dev`
+4. Navigate to Gmail
+5. Click extension icon
+6. Toggle ON to start voice assistant
+
+## Common Issues & Solutions
+
+### Issue: "Service account key not found"
+```bash
+# Solution: Ensure path is correct
+export GOOGLE_APPLICATION_CREDENTIALS="$(pwd)/service-account-key.json"
+```
+
+### Issue: "WebSocket connection refused"
+```bash
+# Check if server is running
+curl http://localhost:8000/api/health
+
+# Check CORS settings match extension ID
+# Get ID from chrome://extensions
+```
+
+### Issue: "Microphone permission denied"
+```javascript
+// Solution: Check browser permissions
+navigator.permissions.query({name: 'microphone'})
+  .then(result => console.log(result.state));
+```
+
+### Issue: "Audio timeout error"
+```python
+# Increase timeout in server.py
+first_chunk = audio_queue.get(timeout=300.0)  # 5 minutes
+```
+
+## Production Build
+
+### Extension Production Build
+```bash
+cd plasmo-my-email-ai
+pnpm build
+# Creates optimized build in build/chrome-mv3-prod
+
+# Package for distribution
+pnpm package
+# Creates .zip file for Chrome Web Store
+```
+
+### Backend Deployment
+```python
+# Use production server
+if __name__ == "__main__":
+    uvicorn.run(
+        "server:app",
+        host="0.0.0.0",  # Allow external connections
+        port=8000,
+        reload=False,     # Disable reload in production
+        workers=4         # Multiple workers
+    )
+```
+
+## Monitoring & Debugging
+
+### Backend Logs
+```python
+# Enable debug logging
+logging.basicConfig(level=logging.DEBUG)
+
+# Session tracking
+logger.info(f"[Session {session_id}] State: {status}")
+```
+
+### Extension Debugging
+```javascript
+// Background service worker
+chrome://extensions → Details → Inspect service worker
+
+// Content script
+Right-click Gmail → Inspect → Console
+
+// Popup
+Right-click extension icon → Inspect popup
+```
+
+### WebSocket Monitoring
+```javascript
+// Chrome DevTools → Network → WS
+// Monitor WebSocket messages in real-time
+```
+
+## Performance Tuning
+
+### Backend Optimization
+```python
+# Quota management
+MAX_TOKENS = 512
+AI_REQUEST_COOLDOWN = 2.0
+
+# Session cleanup
+SESSION_TIMEOUT = 30 * 60  # 30 minutes
+```
+
+### Extension Optimization
+```typescript
+// Audio chunk size
+mediaRecorder.start(250);  // 250ms optimal
+
+// Reconnection backoff
+Math.min(1000 * reconnectAttempts, 5000)
+```
+
+## Security Best Practices
+
+### API Keys
+- Never commit API keys to repository
+- Use `.env` file (add to .gitignore)
+- Rotate keys regularly
+- Use service accounts for production
+
+### CORS Configuration
+- Whitelist specific extension IDs
+- Don't use wildcard origins
+- Validate WebSocket connections
+
+### Data Privacy
+- Audio processed locally when possible
+- No persistent storage of audio
+- Clear session data on disconnect
+- Implement user consent flow
+
+## Testing Guidelines
+
+### Unit Tests
+```bash
+# Backend tests
+pytest browser_use/tests/
+
+# Extension tests
+cd plasmo-my-email-ai
+pnpm test
+```
+
+### Integration Tests
+1. Test WebSocket connection
+2. Test audio streaming
+3. Test Gmail DOM manipulation
+4. Test continuous conversation
+
+### End-to-End Tests
+1. Full voice command flow
+2. Error recovery scenarios
+3. Multiple session handling
+4. Browser compatibility
+
+## Deployment Checklist
+
+- [ ] Environment variables configured
+- [ ] CORS origins updated with production URLs
+- [ ] SSL certificates for WebSocket (wss://)
+- [ ] Error tracking configured
+- [ ] Performance monitoring setup
+- [ ] Security audit completed
+- [ ] User documentation updated
+- [ ] Chrome Web Store listing prepared
