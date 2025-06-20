@@ -27,3 +27,15 @@ node_modules/
 # Task files
 tasks.json
 tasks/ 
+# Browser profiles and sensitive files
+browser_use/browser_profile/
+browser_use/browser_profile_*/
+browser_use/service-account-key.json
+browser_use/.env
+**/__pycache__/
+*.pyc
+.cursor/
+.taskmaster/
+.roo/
+my-email-ai/
+node_modules/
